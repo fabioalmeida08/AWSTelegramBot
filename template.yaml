@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  sam-appl
+
+Parameters:
+  FQDN:
+    Type: String
+    Description: FQDN (www.example.com) para usar com API Gateway
+  ZoneId:
+    Type: String
+    Description: ID da AWS Hosted Zone no formato "Z111111QQQQQQQ".
+    Default: none
+
+Resources:
+  
+  GenerateCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref FQDN
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref FQDN
+          HostedZoneId: !Ref ZoneId
+
+  RestApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Domain:
+        DomainName: !Ref FQDN
+        CertificateArn: !Ref GenerateCertificate
+        Route53:
+          HostedZoneId: !Ref ZoneId
+      Auth:
+        ApiKeyRequired: true
+        UsagePlan:
+          CreateUsagePlan: PER_API
+          Description: limited usage plan
+          Quota:
+            Limit: 100
+            Period: DAY
+          Throttle:
+            BurstLimit: 5
+            RateLimit: 2
+
+  TelegramBotFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: telegram_bot/
+      Handler: app.lambda_handler
+      Runtime: python3.12
+      Policies:
+        - SSMParameterWithSlashPrefixReadPolicy:
+            ParameterName: /Telegram/TokenBot
+        - SSMParameterWithSlashPrefixReadPolicy:
+            ParameterName: /Telegram/MyChatID
+      Architectures:
+        - x86_64
+      Events:
+        MessageRequestEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApiGateway
+            Path: /notify
+            Method: post
+            Auth:
+              ApiKeyRequired: true
+      Layers:
+        - !Ref ProjectLayers
+
+  ProjectLayers:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: layers
+      CompatibleRuntimes:
+        - python3.12
+    Metadata:
+      BuildMethod: python3.12
+
+
+Outputs:
+  API:
+    Description: 'API Gateway endpoint URL'
+    Value: !Sub 'https://${FQDN}'
+  TelegramBotFunction:
+    Description: 'Telegram bot function ARN'
+    Value: !GetAtt TelegramBotFunction.Arn
+  TelegramBotFunctionRole:
+    Description: 'IAM Role telegram bot lambda'
+    Value: !GetAtt TelegramBotFunctionRole.Arn
+  ApiKey:
+    Description: "link para ver API KEY: ( adicionar no HEADER do request como 'x-api-key')"
+    Value: !Sub "https://console.aws.amazon.com/apigateway/home?region=${AWS::Region}#/api-keys/${RestApiGatewayApiKey}"
