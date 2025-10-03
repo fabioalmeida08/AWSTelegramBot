@@ -69,7 +69,7 @@ Abaixo está uma imagem que descreve o fluxo da infraestrutura desenvolvida:
    -d '{"message": "Teste de notificação"}'
    ```
 
-## 🚧 Roadblocks
+## ⚠️ Limitações e Ajustes Manuais
 
 Mesmo Usando IaC algumas partes tiveram que ser feitas manuais:
 
